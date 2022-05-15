@@ -1,40 +1,41 @@
-use std::collections::HashMap;
-use std::option::Option;
-use serde::Serialize;
+use std::{collections::HashMap, option::Option, vec::Vec};
+use serde::{Serialize,Deserialize};
 use crate::Transaction::Transaction;
 
 
-
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Node{
-    key: String,
-    children: Option<HashMap<String, Node>>,
-    transaction: Option<Transaction>
+    //key: String,
+    //value: Option<String>, //nodo serialized e reso stringa (forse posso togliere?)
+    transactions: Option<Vec<Transaction>>,
+    //left: Option<char>,       non mi serve left e right perchè in base all'id che devo raggiungere, prendo l'id (key) del nodo che vglio raggiungere e ci aggiungo un carattere
+    //ottengo la key del nuovo nodo che voglio raggiungere. Quindi interpello la hashmap con la key ottenuta. In realtà anche key mi sembra inutile perchè l'informazione è gia
+    //contenuta nella mappa.
+    //right: Option<char>
 }
 
 impl Node{
-    pub fn originate(k: String, is_leaf: bool, t: Option<Transaction>)->Node{
+    pub fn originate(/*k: String,*/ ts: Option<Vec<Transaction>>/*, chl: Option<char>, chr: Option<char>*/)->Node{
         //return Node{key: k, children: HashMap::new(), transaction: t};
-        if is_leaf{
-            return Node{key: k, children: None, transaction: t};
+        return Node{/*key: k,*/ transactions: ts/* , left: chl, right: chr*/};
+    }
+    pub fn get_transactions(& self)->&Option<Vec<Transaction>>{
+        return &self.transactions;
+    }
+    pub fn get_string_transaction(t: Option<Transaction>)->String{
+        if t.is_none(){
+            return String::from("Transaction is None");
         }
-        return Node{key: k, children: Some(HashMap::<String,Node>::new()), transaction: None};
+        let mut s = t.as_ref().unwrap().get_source();
+        let mut d = t.as_ref().unwrap().get_destination();
+        let mut a = t.as_ref().unwrap().get_amount().to_string();
+
+        s.push_str(d);
+        s.push_str(&a);
+        return s.to_string();  //return a string containing s+d+a (source+destination+amount)
     }
-    pub fn get_transaction(& self)->&Option<Transaction>{
-        return &self.transaction;
-    }
-    pub fn get_string_transaction(& self)->String{
-        if self.key == (String::from("DATA")){
-            let res = self.transaction.as_ref().unwrap().get_source();
-            //res.push_str(self.transaction.get_destination());
-            //res.push_str(&self.transaction.get_amount().to_string());            
-            return res.to_string()                  //String::from(self.transaction.get_source() + self.transaction.get_destination() + self.transaction.get_amount()); 
-        }
-        return String::from("This node is not a leaf: it doesn't contain a transaction");
-    }
-    pub fn get_children(&mut self)->&mut Option<HashMap<String, Node>>{
-       return &mut self.children;
-    }
-    pub fn add_child(&mut self, k: String, new_node: Node){
+    
+    /*pub fn add_node(&mut self, k: String, new_node: Node){
         self.children.as_mut().unwrap().insert(k, new_node);
-    }
+    }*/
 }
