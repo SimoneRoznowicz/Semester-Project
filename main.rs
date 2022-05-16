@@ -6,12 +6,13 @@ use serde_json::json;
 mod MerkleTree;
 mod Node;
 mod Transaction;
-
+mod Value;
+mod Proof;
 
 //#[derive(Serialize, Deserialize, Debug)]
 fn main(){
     print!("\nHey I'm main.rs file!\n\n");
-    let node = Node::Node::originate(String::from("ciao"), false, None);
+    let node = Node::Node::originate(None);
     //let point = Point { x: 1, y: 2 };
 
     let serialized = serde_json::to_string(&node).unwrap();

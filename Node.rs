@@ -1,4 +1,4 @@
-use std::{collections::HashMap, option::Option, vec::Vec};
+use std::option::Option;
 use serde::{Serialize,Deserialize};
 use crate::Transaction::Transaction;
 
@@ -15,9 +15,8 @@ pub struct Node{
 }
 
 impl Node{
-    pub fn originate(/*k: String,*/ ts: Option<Vec<Transaction>>/*, chl: Option<char>, chr: Option<char>*/)->Node{
-        //return Node{key: k, children: HashMap::new(), transaction: t};
-        return Node{/*key: k,*/ transactions: ts/* , left: chl, right: chr*/};
+    pub fn originate(ts: Option<Vec<Transaction>>)->Node{
+        return Node{transactions: ts};
     }
     pub fn get_transactions(& self)->&Option<Vec<Transaction>>{
         return &self.transactions;
@@ -26,7 +25,7 @@ impl Node{
         if t.is_none(){
             return String::from("Transaction is None");
         }
-        let mut s = t.as_ref().unwrap().get_source();
+        let mut s = t.as_ref().unwrap().get_source().clone();
         let mut d = t.as_ref().unwrap().get_destination();
         let mut a = t.as_ref().unwrap().get_amount().to_string();
 
@@ -34,8 +33,7 @@ impl Node{
         s.push_str(&a);
         return s.to_string();  //return a string containing s+d+a (source+destination+amount)
     }
-    
-    /*pub fn add_node(&mut self, k: String, new_node: Node){
-        self.children.as_mut().unwrap().insert(k, new_node);
-    }*/
+    pub fn add_transaction(){
+
+    }
 }
