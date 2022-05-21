@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, boxed::Box};
 use serde::{Serialize,Deserialize};
 
 use talk::crypto::primitives::hash::Hash;
@@ -10,8 +10,6 @@ use talk::crypto::primitives::hash::hash;
     Big HashMap contains as key the HASH OF THE NODE (as defined for Internal, Leaf and Empty) and as Value &NodeGeneric<K, V>
  */
 
-
-
 pub fn get_bit_direction()->bool{
     
 }
@@ -22,10 +20,10 @@ pub enum NodeGeneric<K, V> /*where K: Serialize, V: Serialize*/{
 }
 
 struct Internal<K, V> /*where K: Serialize, V: Serialize*/{
-    left: Hash,
-    right: Hash
+    left: Box<NodeGeneric<K, V>>,
+    right: Box<NodeGeneric<K, V>>
 }
-struct Empty<K, V> {
+struct Empty {
 }
 struct Leaf<K, V> /*where K: Serialize, V: Serialize*/{
     k: K,
@@ -49,7 +47,6 @@ impl<K, V> NodeGeneric<K, V>{
         }
     }
 
-    
     ///returns an Empty node
     fn to_empty(self)->Empty{
         match self{
@@ -67,7 +64,7 @@ impl<K, V> NodeGeneric<K, V>{
         }
     }
 
-    fn insert(&mut self, key_to_add: K, val_to_add: V, map: HashMap<K, V>, index: u8){
+    fn insert(&mut self, key_to_add: K, val_to_add: V, index: u8){
         match self{
             NodeGeneric::Internal(n) => n.insert(key_to_add, val_to_add, map, index),
             NodeGeneric::Leaf(n) => n.insert(key_to_add, val_to_add, map, index),
@@ -88,9 +85,8 @@ impl<K, V> NodeGeneric<K, V>{
 
 
 impl<K, V> Internal<K, V> {
-    fn new(l: NodeGeneric<K, V>, r: NodeGeneric<K, V>, map: &mut HashMap<K, V>) -> Self {
-        let mut i = Internal {left: l.get_hash(), right: r.get_hash()};
-        i
+    fn new(l: NodeGeneric<K, V>, r: NodeGeneric<K, V>) -> Self {
+        Internal {left: l, right: r}
     }
     fn prove_left(&self, &mut siblings: Vec<Hash>) {
         siblings.push(self.right);
@@ -106,22 +102,32 @@ impl<K, V> Internal<K, V> {
     }
     
     fn find_path(&mut self, key: K, value: V, index: u8) -> Result<&NodeGeneric<K, V>,()>{
-        let direction = todo!();       //semplicemente la funzione bit per una determinata profondità (==per un determinato indice del hash di 256 elementi (from 0---> 255))
-        if(direction==true){
-            self.get_right().find_path(key, value, index);
+        let direction = get_bit_direction();       //semplicemente la funzione bit per una determinata profondità (==per un determinato indice del hash di 256 elementi (from 0---> 255))
+        if direction==true {
+            self.get_right().find_path(key, value, index)
         }
-        self.get_left().find_path(key, value, index);
+        else{
+            self.get_left().find_path(key, value, index)
+        }
     }
 
 
-    fn insert(&self, &mut map: HashMap<K, V>, mut path: Vec<Direction>, leaf: Leaf<K, V>) -> Hash {
-        let direction = path.pop().unwrap();
+    fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8){
+        /*let direction = path.pop().unwrap();
 
         match direction {
             Direction::Left => todo!(),
             Direction::Right => todo!(),
+        }*/
+        let next_index = index+1;
+        if get_bit_direction()==true{       //correspond to a 1 found at this index: right, true, 1
+            self.right.insert(key_to_add, value_to_add, next_index);
+        }
+        else{                               //correspond to a 0 found at this index: left, false, 0
+            self.left.insert(key_to_add, value_to_add, next_index);
         }
     }
+
     fn get_hash(&self) -> Hash {
         let final_hash = hash(&(self.left, self.right));
         final_hash
@@ -129,6 +135,9 @@ impl<K, V> Internal<K, V> {
 }
 
 impl<K, V> Leaf<K, V> {
+    fn new(key: K, value: V) -> Self {
+        Leaf{k: key, v: value}
+    }
     fn get_hash(&self) -> Hash {
         let h1 = hash(&self.key);
         let h2 = hash(&self.value);
@@ -143,26 +152,41 @@ impl<K, V> Leaf<K, V> {
         ();
     }
     //Returns the hash of the key just added to the MPT
-    fn insert(&self, key_to_add: K, val_to_add: V, &mut map: HashMap<K, V>, index: u8) -> Hash {
+    fn insert(&self, key_to_add: K, value_to_add: V, index: u8){
         let hash_key_to_add = hash(&key_to_add); 
-        if key_to_add == self.k {   //modificare valore per questa chiave nella mappa
-            map.insert(hash_key_to_add, val_to_add);
-            hash_key_to_add
+        if key_to_add == self.k {   //substitute the value of this Leaf node
+            self.v = &value_to_add;
         }
         else if index == 255{                       //collision: due chiavi diverse ma con stesso hash. Alla fine confronto le chiavi e sono diverse (ma sono giunto allo stesso nodo finale e quindi sfortunatamente hanno lo stesso hash)
             panic!("followed the same path: different keys but same hash ---> Collision")
         }
-        map.insert(hash_key_to_add, val_to_add);
-        hash_key_to_add
+        //this Leaf node is at depth<255, so insert an Internal node and two children: one is the current node, the other is a new empty Leaf node
+        let new_internal;
+        if get_bit_direction(/*self.k---> devi solo spostare la foglia già formata che appartiene a un'altra source e contiene altre transactions */)==true{    
+            new_internal = Internal::new(Empty::new(), self.into());
+        }
+        else{                               
+            new_internal = Internal::new(self.into(), Empty::new());
+        }
+        new_internal.insert(key_to_add, value_to_add, index+1);
     }
 }
 
-impl<K, V> Empty<K, V>{
+impl Empty{
+    fn new() -> Self {
+        Empty {}
+    }
     fn get_hash(&self) -> Hash {
         let final_hash = hash(&String::from("Empty"));
     }
-    fn find_path(&mut self) -> Result<&NodeGeneric<K, V>,()>{
-        ();
+    fn find_path(&mut self) -> (){
+        ()
+    }
+    fn insert<K, V>(&self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
+        if index == 255{
+            panic!("followed the same path: different keys but same hash ---> Collision");
+        }
+        Leaf::new(key_to_add, value_to_add).into()
     }
 }
 
