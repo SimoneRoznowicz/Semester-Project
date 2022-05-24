@@ -1,5 +1,6 @@
+use serde::de::MapAccess;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Borrow, boxed::Box};
+use std::{borrow::Borrow, boxed::Box, vec::Vec};
 
 use talk::crypto::primitives::hash::hash;
 use talk::crypto::primitives::hash::Hash;
@@ -159,12 +160,15 @@ where
     fn get_mut_right(&mut self) -> &mut NodeGeneric<K, V> {
         &mut self.right
     }
+
     fn get_mut_left(&mut self) -> &mut NodeGeneric<K, V> {
         &mut self.left
     }
+
     fn get_right(&self) -> &NodeGeneric<K, V> {
         &self.right
     }
+
     fn get_left(&self) -> &NodeGeneric<K, V> {
         &self.left
     }
@@ -196,6 +200,7 @@ where
     fn create_hash(l_hash: Hash, r_hash: Hash) -> Hash {
         hash(&(l_hash, r_hash)).unwrap()
     }
+    //NON SO SE SIA GIUSTO QUESTO SOTTO
     fn get_hash(&self) -> Hash {
         Internal::<K, V>::create_hash(self.left.get_hash(), self.right.get_hash())
     }
@@ -265,8 +270,8 @@ where
     K: Serialize + Clone + Eq,
     V: Serialize + Clone,
 {
-    fn from(empty: Empty) -> Self {
-        NodeGeneric::Empty(empty)
+    fn from(e: Empty) -> Self {
+        NodeGeneric::Empty(e)
     }
 }
 impl Empty {
@@ -290,30 +295,42 @@ impl Empty {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Proof {
-    siblings: Vec<Sibling>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Sibling {
-    hash: Hash,
-    direction: Direction,
-}
-
-#[derive(Serialize, Deserialize)]
 enum Direction {
     Left,
     Right,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
-struct MerkleTree {
-    //map: HashMap<Hash, NodeGeneric<K, V>>,
-    root: Hash,
+#[derive(Serialize, Deserialize)]
+struct Left {}
+impl Left {
+    fn get_val() -> bool {
+        false
+    }
 }
-/*
-impl<K, V> MerkleTree
-where K: Serialize + Clone + Eq, V: Serialize + Clone{
+
+#[derive(Serialize, Deserialize)]
+struct Right {}
+
+impl Right {
+    fn get_val() -> bool {
+        true
+    }
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
+struct MerkleTree<K, V>
+where
+    K: Serialize,
+    V: Serialize,
+{
+    root: Box<NodeGeneric<K, V>>,
+}
+
+impl<K, V> MerkleTree<K, V>
+where
+    K: Serialize + Clone + Eq,
+    V: Serialize + Clone,
+{
     fn insert(&mut self, key: K, value: V) {
         todo!()
         /*let path: Vec<Direction> = convert_to_path(hash(key));
@@ -326,38 +343,99 @@ where K: Serialize + Clone + Eq, V: Serialize + Clone{
 
         self.root = hash;*/
     }
-}*/
-/*
-impl<K, V> MerkleTree<K, V> {
-    pub fn prove(&self, key: &K) {
+}
+
+impl<K, V> MerkleTree<K, V>
+where
+    K: Serialize,
+    V: Serialize,
+{
+    //Returns a Proof for a specific leaf (== specific source of payment)
+    pub fn prove(&self, key: &K) /*-> Proof*/
+    {
         let path = hash(key);
 
-        let node: NodeGeneric = self.map.get(&self.root);
+        //let node: NodeGeneric<K, V> = self.map.get(&self.root);
 
         let hash = hash(&key);
 
         let vector: Vec<Hash> = Vec::new();
 
-        let result: Vec<Hash> = node.prove(key, vector);
+        //let result: Vec<Hash> = node.prove(key, vector);
     }
 }
 
-fn get_root_so_i_can_sign_it_later(proof: Proof, my_transaction: T, my_id: Id) -> Hash {
-    let path = proof.path;
-    let siblings = proof.siblings;
+/*struct Proof<V>
+where
+    V: Serialize
+{
+    //PROOF FOR A SPECIFIC SOURCE
+    path: String, //represents the expected id used to get to the transaction
+    vec: Vec<V>, //serialized nodes containing the list of transactions OF THE SAME SPECIFIED SOURCE //lista data dal BROKER
+}*/
 
-    let leaf = Leaf::from(my_id, my_transaction);
-    let hash = leaf.hash();
+#[derive(Serialize, Deserialize, Clone)]
+struct Id<K>
+where
+    K: Serialize,
+{
+    key: K,
+}
+
+impl<K> Id<K>
+where
+    K: Serialize,
+{
+    fn get_key(&self) -> &K {
+        &self.key
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct Sibling {
+    hash: Hash,
+    direction: Direction,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Proof {
+    siblings: Vec<Sibling>,
+}
+
+impl Proof {
+    pub fn new(s: Vec<Sibling>) -> Proof {
+        Proof { siblings: s }
+    }
+    pub fn get_siblings(&self) -> &Vec<Sibling> {
+        &self.siblings
+    }
+}
+
+//devi fare questo metodo che verifica e uno prima che appartiene alla struct MPT che genera la Proof (collezionando quindi i siblings necessari con il metodo simile a get che diceva)
+
+//Returns the hash of the root
+//For each (client, transaction) in the batch, broker creates a proof from MT for (client, transaction)
+fn get_root_hash<T, K>(proof: Proof, my_transaction: T, id: Id<K>) -> Hash
+where
+    T: Serialize + Copy,
+    K: Serialize + Copy + Eq,
+{
+    let siblings = proof.get_siblings();
+    let my_leaf = Leaf::<K, T>::new(id.key, my_transaction);
+
+    //se considero il vettore contenere None values per le mpty leaves, posso iterare siblings e sostituire il valore con il hash di Empty
+
+    //immagino di avere un vector ordinato in base agli hash che vedo prima
+    //initially I have just the hash of the leaf
+    let mut hash_final = my_leaf.get_hash();
 
     for sibling in siblings {
-        hash = if sibling.1 == Direction::Left {
-            let internal = Internal { left: sibling.0, right: hash };
-            internal.hash()
-        } else {
-            let internal = Internal { left: sibling.0, right: hash };
-            internal.hash()
+        match sibling.direction {
+            //Direction::Left indicates that the sibling is on the Left
+            Direction::Left => hash_final = hash(&(sibling.hash, hash_final)).unwrap(),
+            //Direction::Right indicates that the sibling is on the right
+            Direction::Right => hash_final = hash(&(hash_final, sibling.hash)).unwrap(),
         }
     }
-    return hash;
+    hash_final
 }
-*/
