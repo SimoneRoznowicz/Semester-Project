@@ -8,6 +8,13 @@ use talk::crypto::primitives::hash::Hash;
 pub fn get_bit_direction() -> bool {
     todo!()
 }
+
+/*fn add_sibling<Q>(vec: &mut Q, elem: &Sibling) -> &mut Vec<Sibling>
+where Q: Borrow<Vec<Sibling>>{
+    vec.append(elem.clone());
+    vec
+}*/
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NodeGeneric<K, V>
 where
@@ -51,7 +58,7 @@ where
 {
     fn compute_hashes(&mut self) -> Hash {
         match self {
-            NodeGeneric::Empty(n) => n.get_hash(),
+            NodeGeneric::Empty(n) => Empty::get_hash(),
             NodeGeneric::Leaf(n) => n.my_hash,
             NodeGeneric::Internal(n) => n.compute_hashes(),
             //posso pensare anche di non mandare il vettore con tutti i hash dei nodi empty,
@@ -82,6 +89,35 @@ where
         }
     }
 
+    /*fn try_create<'a>() -> &'a String {
+        &String::new()
+    }*/
+    /*fn get_siblings_stub<Q>(&self, key: &Q, index: u8) -> Result<Vec<Sibling>, ()>
+    where
+        K: Borrow<Q>,
+        Q: Serialize + Eq,
+    {
+        let mut siblings = Vec::<Sibling>::new();
+        self.get_siblings(key, index, siblings)
+    }
+    */
+    fn get_siblings<'a, Q>(
+        &'a self,
+        key: &Q,
+        index: u8,
+        siblings: &'a mut Vec<Sibling>,
+    ) -> Result<&'a mut Vec<Sibling>, ()>
+    where
+        K: Borrow<Q>,
+        Q: Serialize + Eq,
+    {
+        match &self {
+            NodeGeneric::Internal(n) => n.get_siblings(key, index, siblings),
+            NodeGeneric::Leaf(n) => Ok(siblings),
+            NodeGeneric::Empty(n) => Err(()),
+        }
+    }
+
     fn find_path<Q>(&self, key: &Q, value: V, index: u8) -> Result<&NodeGeneric<K, V>, ()>
     where
         K: Borrow<Q>,
@@ -107,7 +143,7 @@ where
         match self {
             NodeGeneric::Internal(n) => n.get_hash(),
             NodeGeneric::Leaf(n) => n.get_hash(),
-            NodeGeneric::Empty(n) => n.get_hash(),
+            NodeGeneric::Empty(_) => Empty::get_hash(),
         }
     }
 }
@@ -140,6 +176,45 @@ where
         h.unwrap()
     }
 
+    fn get_siblings<'a, Q>(
+        &'a self,
+        key: &Q,
+        index: u8,
+        siblings: &'a mut Vec<Sibling>,
+    ) -> Result<&'a mut Vec<Sibling>, ()>
+    where
+        K: Borrow<Q>,
+        Q: Serialize + Eq,
+    {
+        let direction = get_bit_direction(/*index*/); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        if direction == true {
+            let l_node = self.get_left();
+            match l_node {
+                NodeGeneric::Internal(n) => {
+                    siblings.insert(0, Sibling::new(n.my_hash.unwrap(), Left {}.into()))
+                }
+                NodeGeneric::Leaf(n) => siblings.insert(0, Sibling::new(n.my_hash, Left {}.into())),
+                NodeGeneric::Empty(n) => {
+                    siblings.insert(0, Sibling::new(Empty::get_hash(), Left {}.into()))
+                }
+            }
+            self.get_right().get_siblings(key, index + 1, siblings)
+        } else {
+            let r_node = self.get_right();
+            match r_node {
+                NodeGeneric::Internal(n) => {
+                    siblings.insert(0, Sibling::new(n.my_hash.unwrap(), Left {}.into()))
+                }
+                NodeGeneric::Leaf(n) => siblings.insert(0, Sibling::new(n.my_hash, Left {}.into())),
+                NodeGeneric::Empty(n) => {
+                    siblings.insert(0, Sibling::new(Empty::get_hash(), Left {}.into()))
+                }
+            }
+            self.get_left().get_siblings(key, index + 1, siblings)
+        }
+    }
+    //Returns the hash of the node calling the method, asssigns the hash value to every Internal node.
+    //This method is to be called when the MPT is complete.
     fn compute_hashes<Q>(&mut self) -> Hash
     where
         K: Borrow<Q>,
@@ -233,6 +308,7 @@ where
     fn compute_hashes(&self) -> Hash {
         self.my_hash
     }
+
     fn create_leaf_hash(key: K, value: V) -> Hash {
         let h1: Hash = hash(&key).unwrap();
         let h2: Hash = hash(&value).unwrap();
@@ -278,7 +354,7 @@ impl Empty {
     fn new() -> Self {
         Empty {}
     }
-    fn get_hash(&self) -> Hash {
+    fn get_hash() -> Hash {
         hash(&()).unwrap()
     }
 
@@ -317,6 +393,17 @@ impl Right {
     }
 }
 
+impl From<Left> for Direction {
+    fn from(left: Left) -> Self {
+        Direction::Left
+    }
+}
+
+impl From<Right> for Direction {
+    fn from(left: Right) -> Self {
+        Direction::Right
+    }
+}
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 struct MerkleTree<K, V>
 where
@@ -343,6 +430,7 @@ where
 
         self.root = hash;*/
     }
+    fn get_value(&self) {}
 }
 
 impl<K, V> MerkleTree<K, V>
@@ -395,6 +483,14 @@ where
 struct Sibling {
     hash: Hash,
     direction: Direction,
+}
+impl Sibling {
+    fn new(h: Hash, d: Direction) -> Sibling {
+        Sibling {
+            hash: h,
+            direction: d,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
