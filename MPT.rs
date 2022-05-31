@@ -1,13 +1,17 @@
 use serde::de::MapAccess;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, boxed::Box, vec::Vec};
-
+//use bitvec
 use talk::crypto::primitives::hash::hash;
 use talk::crypto::primitives::hash::Hash;
 
-pub fn get_bit_direction() -> bool {
-    todo!()
+pub fn get_bit_direction(arr: &[u8; 32], index: u8) -> bool {
+    let byte = arr[(index / 8) as usize];
+    let sub_index: u8 = 1 << (7 - (index % 8));
+    (byte & sub_index) > 0
 }
+
+//prova a togliere Copy dappertutto. Dove lo richiede, prova a mettere .clone()
 
 /*fn add_sibling<Q>(vec: &mut Q, elem: &Sibling) -> &mut Vec<Sibling>
 where Q: Borrow<Vec<Sibling>>{
@@ -41,7 +45,7 @@ where
 pub struct Empty {}
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Copy, Clone, Hash)]
-struct Leaf<K, V>
+pub struct Leaf<K, V>
 where
     K: Serialize,
     V: Serialize,
@@ -54,8 +58,12 @@ where
 impl<K, V> NodeGeneric<K, V>
 where
     K: Serialize + Clone + Eq,
-    V: Serialize + Clone + Copy,
+    V: Serialize + Clone,
 {
+    fn new() -> Self {
+        Self::Empty(Empty::new())
+    }
+
     fn compute_hashes(&mut self) -> Hash {
         match self {
             NodeGeneric::Empty(n) => Empty::get_hash(),
@@ -65,6 +73,7 @@ where
             //(posso ad esempio sostituire quei valori con None)
         }
     }
+
     ///returns a Leaf node
     fn to_leaf(self) -> Leaf<K, V> {
         match self {
@@ -92,46 +101,52 @@ where
     /*fn try_create<'a>() -> &'a String {
         &String::new()
     }*/
-    /*fn get_siblings_stub<Q>(&self, key: &Q, index: u8) -> Result<Vec<Sibling>, ()>
+
+    fn get_siblings_first<Q>(&self, key: &Q, index: u8) -> Result<Vec<Sibling>, ()>
     where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
         let mut siblings = Vec::<Sibling>::new();
-        self.get_siblings(key, index, siblings)
+        self.get_siblings(key, index, &mut siblings);
+        Ok(siblings)
     }
-    */
-    fn get_siblings<'a, Q>(
-        &'a self,
-        key: &Q,
-        index: u8,
-        siblings: &'a mut Vec<Sibling>,
-    ) -> Result<&'a mut Vec<Sibling>, ()>
+
+    fn get_siblings<Q>(&self, key: &Q, index: u8, siblings: &mut Vec<Sibling>)
     where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
         match &self {
             NodeGeneric::Internal(n) => n.get_siblings(key, index, siblings),
-            NodeGeneric::Leaf(n) => Ok(siblings),
-            NodeGeneric::Empty(n) => Err(()),
+            NodeGeneric::Leaf(n) => (),
+            NodeGeneric::Empty(n) => panic!(),
+            _ => panic!(),
         }
     }
 
-    fn find_path<Q>(&self, key: &Q, value: V, index: u8) -> Result<&NodeGeneric<K, V>, ()>
+    fn find_path<Q: ?Sized>(&self, key: &Q, index: u8) -> Result<&NodeGeneric<K, V>, ()>
     where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
-        match &self {
-            n if &n.get_hash() == &hash(&key).unwrap() => Ok(&self),
-            NodeGeneric::Internal(n) => n.find_path(key, value, index),
-            //NodeGeneric::Leaf(n) => n.find_path(key),
+        let my_hash = self.get_hash();
+        let hash_of_given_key = hash(&key).unwrap();
+
+        match self {
+            NodeGeneric::Internal(n) => n.find_path(key, index),
+            NodeGeneric::Leaf(n) => {
+                if hash(&n.k).unwrap() == hash(&key).unwrap() {
+                    Ok(&self)
+                } else {
+                    Err(())
+                }
+            }
             _ => Err(()),
         }
     }
 
-    fn insert(self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
+    fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
         match self {
             NodeGeneric::Internal(n) => n.insert(key_to_add, value_to_add, index),
             NodeGeneric::Leaf(n) => n.insert(key_to_add, value_to_add, index),
@@ -145,6 +160,24 @@ where
             NodeGeneric::Leaf(n) => n.get_hash(),
             NodeGeneric::Empty(_) => Empty::get_hash(),
         }
+    }
+
+    fn hash(&self) -> Hash {
+        match self {
+            NodeGeneric::Internal(n) => n.get_hash(),
+            NodeGeneric::Leaf(n) => n.get_hash(),
+            NodeGeneric::Empty(_) => Empty::get_hash(),
+        }
+    }
+}
+
+impl<K, V> From<&mut Internal<K, V>> for NodeGeneric<K, V>
+where
+    K: Serialize + Clone + Eq,
+    V: Serialize + Clone,
+{
+    fn from(i: &mut Internal<K, V>) -> Self {
+        NodeGeneric::Internal(i.clone())
     }
 }
 
@@ -161,7 +194,7 @@ where
 impl<K, V> Internal<K, V>
 where
     K: Serialize + Clone + Eq,
-    V: Serialize + Clone + Copy,
+    V: Serialize + Clone,
 {
     fn new(l: NodeGeneric<K, V>, r: NodeGeneric<K, V>, h: Option<Hash>) -> Self {
         Internal {
@@ -176,17 +209,13 @@ where
         h.unwrap()
     }
 
-    fn get_siblings<'a, Q>(
-        &'a self,
-        key: &Q,
-        index: u8,
-        siblings: &'a mut Vec<Sibling>,
-    ) -> Result<&'a mut Vec<Sibling>, ()>
+    fn get_siblings<Q>(&self, key: &Q, index: u8, siblings: &mut Vec<Sibling>)
     where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
-        let direction = get_bit_direction(/*index*/); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let key_hash = hash(key).unwrap();
+        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
         if direction == true {
             let l_node = self.get_left();
             match l_node {
@@ -248,27 +277,42 @@ where
         &self.left
     }
 
-    fn find_path<Q>(&self, key: &Q, value: V, index: u8) -> Result<&NodeGeneric<K, V>, ()>
+    fn find_path<Q: ?Sized>(&self, key: &Q, index: u8) -> Result<&NodeGeneric<K, V>, ()>
     where
         K: Borrow<Q>,
         Q: Serialize + Eq,
     {
-        let direction = get_bit_direction(); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let key_hash = hash(&key).unwrap();
+        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+
         if direction == true {
-            self.get_right().find_path(key, value, index)
+            self.get_right().find_path(key, index)
         } else {
-            self.get_left().find_path(key, value, index)
+            self.get_left().find_path(key, index)
         }
     }
 
-    fn insert(mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
-        let next_index = index + 1;
-        if get_bit_direction() == true {
+    fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
+        let key_hash = hash(&key_to_add).unwrap();
+        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+
+        let mut side;
+        if direction == true {
             //correspond to a 1 found at this index: right, true, 1
-            self.right.insert(key_to_add, value_to_add, next_index)
+            side = &mut self.right;
         } else {
-            //correspond to a 0 found at this index: left, false, 0
-            self.left.insert(key_to_add, value_to_add, next_index)
+            //correspond to a 0 found at this index: left, false, 0.
+            side = &mut self.left;
+        }
+
+        let mut n = NodeGeneric::new();
+        std::mem::swap(&mut n, side);
+
+        match n.insert(key_to_add, value_to_add, index + 1) {
+            n @ _ => {
+                *side = Box::new(n);
+                self.into()
+            }
         }
     }
 
@@ -291,10 +335,20 @@ where
     }
 }
 
+impl<K, V> From<&mut Leaf<K, V>> for NodeGeneric<K, V>
+where
+    K: Serialize + Clone + Eq,
+    V: Serialize + Clone,
+{
+    fn from(leaf: &mut Leaf<K, V>) -> Self {
+        NodeGeneric::Leaf(leaf.clone())
+    }
+}
+
 impl<K, V> Leaf<K, V>
 where
     K: Serialize + Clone + Eq,
-    V: Serialize + Clone + Copy,
+    V: Serialize + Clone,
 {
     fn new(key: K, value: V) -> Self {
         let my_h = Leaf::create_leaf_hash(&key, &value);
@@ -319,20 +373,21 @@ where
         Leaf::create_leaf_hash(&self.k, &self.v)
     }
 
-    fn insert(mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
+    fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
         //let hash_key_to_add = hash(&key_to_add);
         if key_to_add == self.k {
             //substitute the value of this Leaf node
-            self.v = value_to_add;
+            self.v = value_to_add.clone();
         } else if index == 255 {
             //collision: due chiavi diverse ma con stesso hash. Alla fine confronto le chiavi e sono diverse (ma sono giunto allo stesso nodo finale e quindi sfortunatamente hanno lo stesso hash)
             panic!("followed the same path: different keys but same hash ---> Collision")
         }
         //this Leaf node is at depth<255, so insert an Internal node and two children: one is the current node, the other is a new empty Leaf node
-        let new_internal;
-        if get_bit_direction(/*self.k---> devi solo spostare la foglia già formata che appartiene a un'altra source e contiene altre transactions */)
-            == true
-        {
+        let mut new_internal;
+        let key_hash = hash(&self.k).unwrap();
+        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+
+        if direction == true {
             new_internal = Internal::new(Empty::new().into(), self.into(), None);
         } else {
             new_internal = Internal::new(self.into(), Empty::new().into(), None);
@@ -350,6 +405,7 @@ where
         NodeGeneric::Empty(e)
     }
 }
+
 impl Empty {
     fn new() -> Self {
         Empty {}
@@ -358,10 +414,10 @@ impl Empty {
         hash(&()).unwrap()
     }
 
-    fn insert<K, V>(mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V>
+    fn insert<K, V>(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V>
     where
         K: Serialize + Clone + Eq,
-        V: Serialize + Clone + Copy,
+        V: Serialize + Clone,
     {
         if index == 255 {
             panic!("followed the same path: different keys but same hash ---> Collision");
@@ -418,49 +474,31 @@ where
     K: Serialize + Clone + Eq,
     V: Serialize + Clone,
 {
-    fn insert(&mut self, key: K, value: V) {
-        todo!()
-        /*let path: Vec<Direction> = convert_to_path(hash(key));
-        let leaf = Leaf::new(key, value);
-
-        let root_node = self.map.get(&root).unwrap();
-
-        self.map.insert(leaf.hash(), leaf);
-        let hash = root_node.insert(path, leaf);
-
-        self.root = hash;*/
+    fn new(r: NodeGeneric<K, V>) -> MerkleTree<K, V> {
+        let r = Box::new(r);
+        MerkleTree { root: r }
     }
-    fn get_value(&self) {}
+
+    fn insert(&mut self, key_to_add: K, value_to_add: V) -> NodeGeneric<K, V> {
+        self.root.insert(key_to_add, value_to_add, 0)
+    }
+
+    fn get_value(&self, key: &K) -> Result<&NodeGeneric<K, V>, ()> {
+        self.root.find_path(key, 0)
+    }
 }
 
 impl<K, V> MerkleTree<K, V>
 where
-    K: Serialize,
-    V: Serialize,
+    K: Serialize + Clone + Eq,
+    V: Serialize + Clone,
 {
     //Returns a Proof for a specific leaf (== specific source of payment)
-    pub fn prove(&self, key: &K) /*-> Proof*/
-    {
-        let path = hash(key);
 
-        //let node: NodeGeneric<K, V> = self.map.get(&self.root);
-
-        let hash = hash(&key);
-
-        let vector: Vec<Hash> = Vec::new();
-
-        //let result: Vec<Hash> = node.prove(key, vector);
+    pub fn prove(&self, key: &K) -> Proof {
+        Proof::new(self.root.get_siblings_first(key, 0).unwrap())
     }
 }
-
-/*struct Proof<V>
-where
-    V: Serialize
-{
-    //PROOF FOR A SPECIFIC SOURCE
-    path: String, //represents the expected id used to get to the transaction
-    vec: Vec<V>, //serialized nodes containing the list of transactions OF THE SAME SPECIFIED SOURCE //lista data dal BROKER
-}*/
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Id<K>
@@ -511,10 +549,13 @@ impl Proof {
 
 //Returns the hash of the root
 //For each (client, transaction) in the batch, broker creates a proof from MT for (client, transaction)
+//method performed by the client
+
+//my_transaction is a vector of the transactions
 fn get_root_hash<T, K>(proof: Proof, my_transaction: T, id: Id<K>) -> Hash
 where
-    T: Serialize + Copy,
-    K: Serialize + Copy + Eq,
+    T: Serialize + Clone,
+    K: Serialize + Eq + Clone,
 {
     let siblings = proof.get_siblings();
     let my_leaf = Leaf::<K, T>::new(id.key, my_transaction);
@@ -534,4 +575,80 @@ where
         }
     }
     hash_final
+}
+
+/*******************************************************************************************************/
+
+#[cfg(test)]
+mod tests {
+    use std::path;
+
+    use super::*;
+    // CONSTRUCTOR TESTS
+
+    #[test]
+    fn leaf_new() {
+        let l = Leaf::<&str, u8>::new("key", 5);
+        assert_eq!(l.k, "key");
+        assert_eq!(l.v, 5);
+    }
+
+    #[test]
+    fn Internal_new() {
+        let left_child = Leaf::<&str, u8>::new("left", 5).into();
+        let right_child = Leaf::<&str, u8>::new("right", 7).into();
+        let i = Internal::new(left_child, right_child, None);
+
+        match (i.get_left(), i.get_right()) {
+            (NodeGeneric::Leaf(l), NodeGeneric::Leaf(r)) => {
+                assert_eq!(l.k, "left");
+                assert_eq!(l.v, 5);
+                assert_eq!(r.k, "right");
+                assert_eq!(r.v, 7);
+            }
+            _ => panic!("Error"),
+        };
+    }
+
+    #[test]
+    fn Empty_get_hash() {
+        let e = Empty::new();
+        assert_eq!(hash(&()).unwrap(), Empty::get_hash());
+    }
+
+    #[test]
+    fn find_path_insert_test1() {
+        let left_empty = Empty::new().into();
+        //let left = Leaf::<&str, u8>::new("left", 55).into();
+        let right_empty = Empty::new().into();
+
+        //let right = Leaf::<&str, u8>::new("right", 77).into();
+        let mut root: NodeGeneric<&str, i32> = Internal::new(left_empty, right_empty, None).into();
+
+        root.insert("ciao", 55, 0);
+
+        match root.find_path("ciao", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 55),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn find_path_insert_test2() {
+        //let left_empty = Empty::new().into();
+        let kk = "left";
+        let gg = hash(&kk).unwrap();
+        let left = Leaf::<&str, u8>::new("Hello", 55).into();
+        let right_empty = Empty::new().into();
+
+        //let right = Leaf::<&str, u8>::new("right", 77).into();
+        let mut root: NodeGeneric<&str, u8> = Internal::new(left, right_empty, None).into();
+
+        root.insert("ciao", 55, 0);
+
+        match root.find_path("ciao", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 55),
+            _ => assert!(false),
+        }
+    }
 }
