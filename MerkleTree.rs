@@ -18,7 +18,7 @@ use talk::{crypto::Identity, net::SessionConnector};
 struct MerkleTree{
     root: Node,
     map: HashMap<String, Value>  //big HashMap containing all the serialized nodes of the MPT as values, all the hashes of the nodes as key
-    //HashMap: key = id (String)    value = Node reference (&Node) and hash of the node (String)
+    //HashMap: key = id (String)    value = {Node reference (&Node)     ,     hash of the node (String)}
 }
 impl MerkleTree {
     fn originate()->MerkleTree{
