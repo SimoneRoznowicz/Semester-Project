@@ -1,23 +1,24 @@
-use serde::de::MapAccess;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, boxed::Box, vec::Vec};
-//use bitvec
 use talk::crypto::primitives::hash::hash;
 use talk::crypto::primitives::hash::Hash;
 
+/**
+ * Introduction to the project:
+ * 
+ * In this representation of the Merkle Patricia Tree,
+ * • true <--> 1 <--> Right
+ * • false <--> 0 <--> Left
+ *
+**/
+
+///Given an index representing the depth of a node in the Merkle Patricia Tree, returns true if the bit is 1,
+///false if the bit is 0 (the array of u8 contains 256 total bits).
 pub fn get_bit_direction(arr: &[u8; 32], index: u8) -> bool {
     let byte = arr[(index / 8) as usize];
     let sub_index: u8 = 1 << (7 - (index % 8));
     (byte & sub_index) > 0
 }
-
-//prova a togliere Copy dappertutto. Dove lo richiede, prova a mettere .clone()
-
-/*fn add_sibling<Q>(vec: &mut Q, elem: &Sibling) -> &mut Vec<Sibling>
-where Q: Borrow<Vec<Sibling>>{
-    vec.append(elem.clone());
-    vec
-}*/
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
 pub enum NodeGeneric<K, V>
@@ -38,7 +39,7 @@ where
 {
     left: Box<NodeGeneric<K, V>>,
     right: Box<NodeGeneric<K, V>>,
-    my_hash: Option<Hash>, //initialized to Node, change to the value at the end (the leaves can be added immediately)
+    my_hash: Option<Hash>,
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Copy, Clone, Hash)]
@@ -63,14 +64,15 @@ where
     fn new() -> Self {
         Self::Empty(Empty::new())
     }
+    fn new_internal_default() -> Self {
+        Self::Internal(Internal::new(NodeGeneric::new(), NodeGeneric::new(), None))
+    }
 
     fn compute_hashes(&mut self) -> Hash {
         match self {
             NodeGeneric::Empty(n) => Empty::get_hash(),
             NodeGeneric::Leaf(n) => n.my_hash,
             NodeGeneric::Internal(n) => n.compute_hashes(),
-            //posso pensare anche di non mandare il vettore con tutti i hash dei nodi empty,
-            //(posso ad esempio sostituire quei valori con None)
         }
     }
 
@@ -98,20 +100,6 @@ where
         }
     }
 
-    /*fn try_create<'a>() -> &'a String {
-        &String::new()
-    }*/
-
-    fn get_siblings_first<Q>(&self, key: &Q, index: u8) -> Result<Vec<Sibling>, ()>
-    where
-        K: Borrow<Q>,
-        Q: Serialize + Eq,
-    {
-        let mut siblings = Vec::<Sibling>::new();
-        self.get_siblings(key, index, &mut siblings);
-        Ok(siblings)
-    }
-
     fn get_siblings<Q>(&self, key: &Q, index: u8, siblings: &mut Vec<Sibling>)
     where
         K: Borrow<Q>,
@@ -120,7 +108,7 @@ where
         match &self {
             NodeGeneric::Internal(n) => n.get_siblings(key, index, siblings),
             NodeGeneric::Leaf(n) => (),
-            NodeGeneric::Empty(n) => panic!(),
+            NodeGeneric::Empty(n) => (),
             _ => panic!(),
         }
     }
@@ -215,16 +203,16 @@ where
         Q: Serialize + Eq,
     {
         let key_hash = hash(key).unwrap();
-        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let direction = get_bit_direction(&key_hash.to_bytes(), index);
         if direction == true {
             let l_node = self.get_left();
             match l_node {
                 NodeGeneric::Internal(n) => {
-                    siblings.insert(0, Sibling::new(n.my_hash.unwrap(), Left {}.into()))
+                    siblings.push(Sibling::new(n.my_hash.unwrap(), Left {}.into()))
                 }
-                NodeGeneric::Leaf(n) => siblings.insert(0, Sibling::new(n.my_hash, Left {}.into())),
+                NodeGeneric::Leaf(n) => siblings.push(Sibling::new(n.my_hash, Left {}.into())),
                 NodeGeneric::Empty(n) => {
-                    siblings.insert(0, Sibling::new(Empty::get_hash(), Left {}.into()))
+                    siblings.push(Sibling::new(Empty::get_hash(), Left {}.into()))
                 }
             }
             self.get_right().get_siblings(key, index + 1, siblings)
@@ -232,18 +220,18 @@ where
             let r_node = self.get_right();
             match r_node {
                 NodeGeneric::Internal(n) => {
-                    siblings.insert(0, Sibling::new(n.my_hash.unwrap(), Left {}.into()))
+                    siblings.push(Sibling::new(n.my_hash.unwrap(), Right {}.into()))
                 }
-                NodeGeneric::Leaf(n) => siblings.insert(0, Sibling::new(n.my_hash, Left {}.into())),
+                NodeGeneric::Leaf(n) => siblings.push(Sibling::new(n.my_hash, Right {}.into())),
                 NodeGeneric::Empty(n) => {
-                    siblings.insert(0, Sibling::new(Empty::get_hash(), Left {}.into()))
+                    siblings.push(Sibling::new(Empty::get_hash(), Right {}.into()))
                 }
             }
             self.get_left().get_siblings(key, index + 1, siblings)
         }
     }
-    //Returns the hash of the node calling the method, asssigns the hash value to every Internal node.
-    //This method is to be called when the MPT is complete.
+
+    ///Returns the hash of the node calling the method and asssigns a hash value to every Internal node.
     fn compute_hashes<Q>(&mut self) -> Hash
     where
         K: Borrow<Q>,
@@ -255,12 +243,7 @@ where
         );
         self.set_hash(Some(this_hash))
     }
-    /*fn prove_left(&self, &mut siblings: Vec<Hash>) {
-        siblings.push(self.right);
-    }
-    fn prove_right(&self, &mut siblings: Vec<Hash>) {
-        siblings.push(self.left);
-    }*/
+
     fn get_mut_right(&mut self) -> &mut NodeGeneric<K, V> {
         &mut self.right
     }
@@ -283,25 +266,23 @@ where
         Q: Serialize + Eq,
     {
         let key_hash = hash(&key).unwrap();
-        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let direction = get_bit_direction(&key_hash.to_bytes(), index);
 
         if direction == true {
-            self.get_right().find_path(key, index)
+            self.get_right().find_path(key, index + 1)
         } else {
-            self.get_left().find_path(key, index)
+            self.get_left().find_path(key, index + 1)
         }
     }
 
     fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
         let key_hash = hash(&key_to_add).unwrap();
-        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let direction = get_bit_direction(&key_hash.to_bytes(), index);
 
         let mut side;
         if direction == true {
-            //correspond to a 1 found at this index: right, true, 1
             side = &mut self.right;
         } else {
-            //correspond to a 0 found at this index: left, false, 0.
             side = &mut self.left;
         }
 
@@ -319,7 +300,7 @@ where
     fn create_hash(l_hash: Hash, r_hash: Hash) -> Hash {
         hash(&(l_hash, r_hash)).unwrap()
     }
-    //NON SO SE SIA GIUSTO QUESTO SOTTO
+
     fn get_hash(&self) -> Hash {
         Internal::<K, V>::create_hash(self.left.get_hash(), self.right.get_hash())
     }
@@ -351,7 +332,7 @@ where
     V: Serialize + Clone,
 {
     fn new(key: K, value: V) -> Self {
-        let my_h = Leaf::create_leaf_hash(&key, &value);
+        let my_h = Leaf::create_leaf_hash(key.clone(), value.clone());
         Leaf {
             k: key,
             v: value,
@@ -359,8 +340,9 @@ where
         }
     }
 
-    fn compute_hashes(&self) -> Hash {
-        self.my_hash
+    fn set_hash(&mut self, h: Hash) -> Hash {
+        self.my_hash = h;
+        h
     }
 
     fn create_leaf_hash(key: K, value: V) -> Hash {
@@ -374,25 +356,25 @@ where
     }
 
     fn insert(&mut self, key_to_add: K, value_to_add: V, index: u8) -> NodeGeneric<K, V> {
-        //let hash_key_to_add = hash(&key_to_add);
-        if key_to_add == self.k {
-            //substitute the value of this Leaf node
+        if hash(&key_to_add).unwrap() == hash(&self.k).unwrap() {
             self.v = value_to_add.clone();
+            self.set_hash(self.get_hash());
+            return self.into();
         } else if index == 255 {
-            //collision: due chiavi diverse ma con stesso hash. Alla fine confronto le chiavi e sono diverse (ma sono giunto allo stesso nodo finale e quindi sfortunatamente hanno lo stesso hash)
             panic!("followed the same path: different keys but same hash ---> Collision")
         }
-        //this Leaf node is at depth<255, so insert an Internal node and two children: one is the current node, the other is a new empty Leaf node
+        // this Leaf node is at depth < 255 but the key_to_add != self.k, so create a branch Internal node,
+        // move the precedent Leaf node more into depth and create the Empty sibling 
         let mut new_internal;
         let key_hash = hash(&self.k).unwrap();
-        let direction = get_bit_direction(&key_hash.to_bytes(), index); //semplicemente la funzione bit per una determinata profondità (== per un determinato indice del hash di 256 elementi (from 0---> 255))
+        let direction = get_bit_direction(&key_hash.to_bytes(), index); 
 
         if direction == true {
             new_internal = Internal::new(Empty::new().into(), self.into(), None);
         } else {
             new_internal = Internal::new(self.into(), Empty::new().into(), None);
         }
-        new_internal.insert(key_to_add, value_to_add, index + 1)
+        new_internal.insert(key_to_add, value_to_add, index)
     }
 }
 
@@ -410,6 +392,7 @@ impl Empty {
     fn new() -> Self {
         Empty {}
     }
+
     fn get_hash() -> Hash {
         hash(&()).unwrap()
     }
@@ -426,13 +409,13 @@ impl Empty {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 enum Direction {
     Left,
     Right,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Left {}
 impl Left {
     fn get_val() -> bool {
@@ -440,7 +423,7 @@ impl Left {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 struct Right {}
 
 impl Right {
@@ -474,17 +457,24 @@ where
     K: Serialize + Clone + Eq,
     V: Serialize + Clone,
 {
-    fn new(r: NodeGeneric<K, V>) -> MerkleTree<K, V> {
-        let r = Box::new(r);
-        MerkleTree { root: r }
+    fn new() -> MerkleTree<K, V> {
+        let n = Box::new(NodeGeneric::new_internal_default());
+        MerkleTree { root: n }
     }
 
     fn insert(&mut self, key_to_add: K, value_to_add: V) -> NodeGeneric<K, V> {
         self.root.insert(key_to_add, value_to_add, 0)
     }
 
-    fn get_value(&self, key: &K) -> Result<&NodeGeneric<K, V>, ()> {
-        self.root.find_path(key, 0)
+    fn get_node(&self, key: K) -> Result<&NodeGeneric<K, V>, ()> {
+        self.root.find_path(&key, 0)
+    }
+
+    fn get_value(&self, key: K) -> V {
+        match self.get_node(key).unwrap() {
+            NodeGeneric::Leaf(n) => n.v.clone(),
+            _ => panic!(),
+        }
     }
 }
 
@@ -493,10 +483,28 @@ where
     K: Serialize + Clone + Eq,
     V: Serialize + Clone,
 {
-    //Returns a Proof for a specific leaf (== specific source of payment)
+    /// Returns a Proof for a specific leaf (== specific source of payment)
+    pub fn prove(&mut self, key: K) -> Proof {
+        let mut siblings = Vec::<Sibling>::new();
+        let node_err = self.get_node(key.clone());
 
-    pub fn prove(&self, key: &K) -> Proof {
-        Proof::new(self.root.get_siblings_first(key, 0).unwrap())
+        let mut node_err = match node_err {
+            Ok(n) => {}
+            Err(e) => return Proof::new(siblings),
+        };
+
+        self.root.get_siblings(&key, 0, &mut siblings);
+        siblings.reverse();
+        Proof::new(siblings)
+    }
+
+    pub fn compute_hashes(&mut self) -> Hash {
+        self.root.compute_hashes()
+    }
+
+    pub fn compute_hashes_prove(&mut self, key: K) -> Proof {
+        self.compute_hashes();
+        self.prove(key)
     }
 }
 
@@ -512,12 +520,16 @@ impl<K> Id<K>
 where
     K: Serialize,
 {
+    fn new(k: K) -> Self {
+        Id { key: k }
+    }
+
     fn get_key(&self) -> &K {
         &self.key
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Sibling {
     hash: Hash,
     direction: Direction,
@@ -531,7 +543,7 @@ impl Sibling {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Proof {
     siblings: Vec<Sibling>,
 }
@@ -545,32 +557,20 @@ impl Proof {
     }
 }
 
-//devi fare questo metodo che verifica e uno prima che appartiene alla struct MPT che genera la Proof (collezionando quindi i siblings necessari con il metodo simile a get che diceva)
-
-//Returns the hash of the root
-//For each (client, transaction) in the batch, broker creates a proof from MT for (client, transaction)
-//method performed by the client
-
-//my_transaction is a vector of the transactions
-fn get_root_hash<T, K>(proof: Proof, my_transaction: T, id: Id<K>) -> Hash
+/// Returns the hash of the root
+fn get_root_hash<T, K>(proof: Proof, my_transactions: T, id: Id<K>) -> Hash
 where
     T: Serialize + Clone,
     K: Serialize + Eq + Clone,
 {
     let siblings = proof.get_siblings();
-    let my_leaf = Leaf::<K, T>::new(id.key, my_transaction);
+    let my_leaf = Leaf::<K, T>::new(id.key, my_transactions);
 
-    //se considero il vettore contenere None values per le mpty leaves, posso iterare siblings e sostituire il valore con il hash di Empty
-
-    //immagino di avere un vector ordinato in base agli hash che vedo prima
-    //initially I have just the hash of the leaf
     let mut hash_final = my_leaf.get_hash();
 
     for sibling in siblings {
         match sibling.direction {
-            //Direction::Left indicates that the sibling is on the Left
             Direction::Left => hash_final = hash(&(sibling.hash, hash_final)).unwrap(),
-            //Direction::Right indicates that the sibling is on the right
             Direction::Right => hash_final = hash(&(hash_final, sibling.hash)).unwrap(),
         }
     }
@@ -618,11 +618,9 @@ mod tests {
 
     #[test]
     fn find_path_insert_test1() {
+        //insert when I find an empty node (so I move the leaf)
         let left_empty = Empty::new().into();
-        //let left = Leaf::<&str, u8>::new("left", 55).into();
         let right_empty = Empty::new().into();
-
-        //let right = Leaf::<&str, u8>::new("right", 77).into();
         let mut root: NodeGeneric<&str, i32> = Internal::new(left_empty, right_empty, None).into();
 
         root.insert("ciao", 55, 0);
@@ -635,19 +633,279 @@ mod tests {
 
     #[test]
     fn find_path_insert_test2() {
-        //let left_empty = Empty::new().into();
-        let kk = "left";
-        let gg = hash(&kk).unwrap();
+        //insert when I find a leaf (move the leaf, and then put the key-value in an empty node)
         let left = Leaf::<&str, u8>::new("Hello", 55).into();
         let right_empty = Empty::new().into();
-
-        //let right = Leaf::<&str, u8>::new("right", 77).into();
         let mut root: NodeGeneric<&str, u8> = Internal::new(left, right_empty, None).into();
+        //First 8 bits (there are 256 bit):
+        //124: 01111100 --> hash(&"Hello")[0] == 124
+        //32:  00100000 --> hash(&"ciao")[0] == 32
+        //0 == FALSE AND 1 == TRUE
 
         root.insert("ciao", 55, 0);
 
         match root.find_path("ciao", 0).unwrap() {
             NodeGeneric::Leaf(n) => assert_eq!(n.v, 55),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn find_path_insert_test3() {
+        //substitute the value of a Leaf (the key is already existing)
+        let left = Leaf::<&str, u8>::new("Hello", 55).into();
+        let right_empty = Empty::new().into();
+
+        let mut root: NodeGeneric<&str, u8> = Internal::new(left, right_empty, None).into();
+
+        root.insert("Hello", 123, 0);
+
+        match root.find_path("Hello", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 123),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn find_path_insert_test4() {
+        //insert some nodes and then go through the tree to find each value
+        let left_empty = Empty::new().into();
+        let right_empty = Empty::new().into();
+
+        let mut root: NodeGeneric<&str, u8> = Internal::new(left_empty, right_empty, None).into();
+
+        root.insert("Hello", 1, 0);
+        root.insert("AAAAA", 2, 0);
+        root.insert("BBBBB", 3, 0);
+        root.insert("CCCCC", 4, 0);
+        root.insert("DDDDD", 5, 0);
+        root.insert("EEEEE", 66, 0);
+        root.insert("FFFFF", 7, 0);
+        root.insert("GGGGG", 8, 0);
+        root.insert("EEEEE", 6, 0);
+
+        //124: 01111100 --> hash(&"Hello")[0] == 124
+        //32:  00100000 --> hash(&"ciao")[0] == 32
+        //0 == FALSE AND 1 == TRUE
+        match root.find_path("Hello", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 1),
+            _ => assert!(false),
+        }
+        match root.find_path("AAAAA", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 2),
+            _ => assert!(false),
+        }
+        match root.find_path("EEEEE", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 6),
+            _ => assert!(false),
+        }
+        match root.find_path("CCCCC", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 4),
+            _ => assert!(false),
+        }
+        match root.find_path("GGGGG", 0).unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 8),
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+
+    fn MerkleTree_new() {
+        //a new Merkle Patricia Tree has a root which matches an Internal node, whose left
+        //and right children match Empty nodes
+        let mpt: MerkleTree<&str, u8> = MerkleTree::new();
+        match *mpt.root {
+            NodeGeneric::Internal(n) => {
+                match *n.left {
+                    NodeGeneric::Empty(_) => (),
+                    _ => assert!(false),
+                }
+                match *n.right {
+                    NodeGeneric::Empty(_) => (),
+                    _ => assert!(false),
+                }
+                assert!(true)
+            }
+            _ => assert!(false),
+        }
+    }
+
+    #[test]
+    fn MerkleTree_find_path_insert() {
+        let mut mpt: MerkleTree<&str, u8> = MerkleTree::new();
+        mpt.insert("HHHHH", 1);
+        mpt.insert("AAAAA", 2);
+        mpt.insert("BBBBB", 3);
+        mpt.insert("CCCCC", 4);
+        mpt.insert("DDDDD", 5);
+        mpt.insert("EEEEE", 66);
+        mpt.insert("FFFFF", 7);
+        mpt.insert("GGGGG", 8);
+        mpt.insert("EEEEE", 6);
+
+        
+        match mpt.get_node("AAAAA").unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 2),
+            _ => assert!(false),
+        }
+        assert_eq!(mpt.get_value("AAAAA"), 2);
+        match mpt.get_node("EEEEE").unwrap() {
+            NodeGeneric::Leaf(n) => assert_eq!(n.v, 6),
+            _ => assert!(false),
+        }
+        assert_eq!(mpt.get_value("EEEEE"), 6);
+        assert_eq!(mpt.get_value("HHHHH"), 1);
+        assert_eq!(mpt.get_value("BBBBB"), 3);
+        assert_eq!(mpt.get_value("FFFFF"), 7);
+        assert_eq!(mpt.get_value("CCCCC"), 4);
+        assert_eq!(mpt.get_value("GGGGG"), 8);
+        assert_eq!(mpt.get_value("DDDDD"), 5);
+
+    }
+
+    #[test]
+    fn root_compute_hashes_prove1() {
+        let mut mpt: MerkleTree<&str, u8> = MerkleTree::new();
+        mpt.insert("Hello", 1);
+        mpt.insert("ciao", 2);
+
+        let hash_Hello = hash(&(hash(&"Hello").unwrap(), hash(&1u8).unwrap())).unwrap();
+        let hash_ciao = hash(&(hash(&"ciao").unwrap(), hash(&2u8).unwrap())).unwrap();
+
+        let hash_empty = hash(&()).unwrap(); //hash(&"Hello").unwrap();
+        let hash_internal = hash(&(hash_ciao, hash_Hello)).unwrap();
+        let hash_root = hash(&(hash_internal, Empty::get_hash())).unwrap();
+
+        assert_eq!(mpt.root.compute_hashes(), hash_root);
+
+        let proofHello = mpt.prove("Hello");
+        let dir0 = &proofHello.siblings.get(0).unwrap().direction;
+        let dir1 = &proofHello.siblings.get(1).unwrap().direction;
+
+        match dir0 {
+            Direction::Left => assert!(true),
+            Direction::Right => assert!(false),
+        }
+        match dir1 {
+            Direction::Left => assert!(false),
+            Direction::Right => assert!(true),
+        }
+        assert_eq!(proofHello.siblings.len(), 2);
+
+        let proofciao = mpt.prove("ciao");
+        let dir0 = &proofciao.siblings.get(0).unwrap().direction;
+        let dir1 = &proofciao.siblings.get(1).unwrap().direction;
+
+        match dir0 {
+            Direction::Left => assert!(false),
+            Direction::Right => assert!(true),
+        }
+        match dir1 {
+            Direction::Left => assert!(false),
+            Direction::Right => assert!(true),
+        }
+        assert_eq!(proofciao.siblings.len(), 2);
+    }
+
+    #[test]
+    fn root_compute_hashes_prove2() {
+        let mut mpt: MerkleTree<&str, u8> = MerkleTree::new();
+        mpt.insert("HHHHH", 1);
+        mpt.insert("AAAAA", 2);
+        mpt.insert("BBBBB", 3);
+        mpt.insert("CCCCC", 4);
+        mpt.insert("DDDDD", 5);
+        mpt.insert("EEEEE", 66);
+        mpt.insert("FFFFF", 7);
+        mpt.insert("GGGGG", 8);
+        mpt.insert("EEEEE", 6);
+        //First 8 bits (there are 256 bit):
+        //113: 01110001 --> HHHHH  //68:  01000100 --> AAAAA  //201: 11001001 --> BBBBB
+        //157: 10011101 --> CCCCC  //12:  00001100 --> DDDDD  //100: 01100100 --> EEEEE
+        //104: 01101000 --> FFFFF  //183: 10110111 --> GGGGG
+        mpt.compute_hashes();
+        print!("HHHHH\n\n");
+        let proofHHHHH = mpt.prove("HHHHH");
+        for sib in &proofHHHHH.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nAAAAA");
+        let proofAAAAA = mpt.prove("AAAAA");
+        for sib in &proofAAAAA.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nBBBBB");
+
+        let proofBBBBB = mpt.prove("BBBBB");
+        for sib in &proofBBBBB.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nCCCCC");
+
+        let proofCCCCC = mpt.prove("CCCCC");
+        for sib in &proofCCCCC.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nDDDDD");
+
+        let proofDDDDD = mpt.prove("DDDDD");
+        for sib in &proofDDDDD.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nEEEEE");
+
+        let proofEEEEE = mpt.prove("EEEEE");
+        for sib in &proofEEEEE.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nFFFFF");
+
+        let proofFFFFF = mpt.prove("FFFFF");
+        for sib in &proofFFFFF.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\nGGGGG");
+
+        let proofGGGGG = mpt.prove("GGGGG");
+        for sib in &proofGGGGG.siblings {
+            print!("\n\nsib == {:?}", sib);
+        }
+        print!("\n\n\n");
+    }
+
+    #[test]
+    fn get_root_hash_test() {
+        let mut mpt: MerkleTree<&str, u8> = MerkleTree::new();
+        mpt.insert("HHHHH", 1);
+
+        mpt.insert("AAAAA", 5);
+        mpt.insert("AAAAA", 2);
+        mpt.insert("BBBBB", 3);
+        mpt.insert("CCCCC", 4);
+        mpt.insert("DDDDD", 5);
+        mpt.insert("EEEEE", 66);
+        mpt.insert("FFFFF", 7);
+        mpt.insert("GGGGG", 8);
+        mpt.insert("EEEEE", 6);
+
+        let mut hash_root = mpt.root.get_hash();
+        mpt.compute_hashes();
+
+        //"Hello" key does not exist in the mpt so expect an empty vector siblings
+        let mut proof_nothing = mpt.prove("Hello"); 
+        assert_eq!(proof_nothing.siblings.len(), 0);
+
+        let mut proof = mpt.prove("GGGGG");
+        let reconstructed_hash_root = get_root_hash(proof, 8u8, Id::new("GGGGG"));
+
+        match *mpt.root {
+            NodeGeneric::Internal(n) => {
+                assert_eq!(n.my_hash.unwrap(), hash_root);
+                print!("FIRST ASSERT PASSATO\n\n");
+                assert_eq!(hash_root, reconstructed_hash_root);
+                print!("SECOND ASSERT PASSED\n\n");
+            }
             _ => assert!(false),
         }
     }
