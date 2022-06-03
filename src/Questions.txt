@@ -1,4 +1,0 @@
-Questions MPT:
-- hash dell'empty node posso mettere un valore fittizio tipo hash di una stringa scelta?
-- Maaaa, in teoria facendo insert in Leaf creando nuovi Internal nodes, poi il padre come fa a puntare
-  al nuovo Internal node invece che alla alla Leaf?
