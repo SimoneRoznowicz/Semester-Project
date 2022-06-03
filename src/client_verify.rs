@@ -2,7 +2,7 @@ use crate::{node_generic::*, structs::*};
 use serde::Serialize;
 use talk::crypto::primitives::hash::{hash, Hash};
 
-
+///Returns the Hash of the root, computed according to the given proof.
 pub fn get_root_hash<T, K>(proof: Proof, my_transactions: T, id: Id<K>) -> Hash
 where
     T: Serialize + Clone,

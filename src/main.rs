@@ -7,5 +7,4 @@ mod node_generic;
 mod structs;
 mod util;
 
-fn main() {
-}
+fn main() {}

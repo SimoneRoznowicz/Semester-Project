@@ -169,18 +169,18 @@ mod tests {
             NodeGeneric::Leaf(n) => assert_eq!(n.get_value(), &2),
             _ => assert!(false),
         }
-        assert_eq!(mpt.get_value("AAAAA"), 2);
+        assert_eq!(mpt.get_value("AAAAA"), &2);
         match mpt.get_node("EEEEE").unwrap() {
             NodeGeneric::Leaf(n) => assert_eq!(n.get_value(), &6),
             _ => assert!(false),
         }
-        assert_eq!(mpt.get_value("EEEEE"), 6);
-        assert_eq!(mpt.get_value("HHHHH"), 1);
-        assert_eq!(mpt.get_value("BBBBB"), 3);
-        assert_eq!(mpt.get_value("FFFFF"), 7);
-        assert_eq!(mpt.get_value("CCCCC"), 4);
-        assert_eq!(mpt.get_value("GGGGG"), 8);
-        assert_eq!(mpt.get_value("DDDDD"), 5);
+        assert_eq!(mpt.get_value("EEEEE"), &6);
+        assert_eq!(mpt.get_value("HHHHH"), &1);
+        assert_eq!(mpt.get_value("BBBBB"), &3);
+        assert_eq!(mpt.get_value("FFFFF"), &7);
+        assert_eq!(mpt.get_value("CCCCC"), &4);
+        assert_eq!(mpt.get_value("GGGGG"), &8);
+        assert_eq!(mpt.get_value("DDDDD"), &5);
     }
 
     #[test]
