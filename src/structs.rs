@@ -25,6 +25,7 @@ impl From<Right> for Direction {
 pub struct Left {}
 
 impl Left {
+    /// Returns the boolean associated with Left: false.
     fn get_val() -> bool {
         false
     }
@@ -35,6 +36,7 @@ impl Left {
 pub struct Right {}
 
 impl Right {
+    /// Returns the boolean associated with Right: true.
     fn get_val() -> bool {
         true
     }
@@ -53,10 +55,12 @@ impl<K> Id<K>
 where
     K: Serialize,
 {
+    /// Returns a new Id.
     pub fn new(k: K) -> Self {
         Id { key: k }
     }
 
+    /// Returns the key associated with the Id invoking the method.
     pub fn get_key(&self) -> &K {
         &self.key
     }
@@ -69,6 +73,7 @@ pub struct Sibling {
 }
 
 impl Sibling {
+    /// Returns a new Sibling.
     pub fn new(h: Hash, d: Direction) -> Sibling {
         Sibling {
             hash: h,
@@ -76,10 +81,12 @@ impl Sibling {
         }
     }
 
+    /// Returns the direction associated with the Sibling invoking the method.
     pub fn get_direction(&self) -> &Direction {
         &self.direction
     }
-
+    
+    /// Returns the Hash associated with the Sibling invoking the method.
     pub fn get_hash(&self) -> &Hash {
         &self.hash
     }
@@ -92,9 +99,12 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// Returns a new Proof.
     pub fn new(s: Vec<Sibling>) -> Proof {
         Proof { siblings: s }
     }
+
+    /// Returns a reference to the vector of Siblings associated with the Proof invoking the method.
     pub fn get_siblings(&self) -> &Vec<Sibling> {
         &self.siblings
     }

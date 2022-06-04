@@ -46,14 +46,14 @@ where
     /// Returns the created Leaf node as NodeGeneric. 
     /// Returns an already existing Leaf as NodeGeneric if the key to be inserted
     /// already exists. Inserts a new Leaf in the MerkleTree if the key is not 
-    /// present in the MerkleTree or substitutes the current value associated to 
-    /// the given key. Panics if there is a collision
+    /// contained or substitutes the current value associated to the given key.
+    /// Panics if there is a collision
     pub fn insert(&mut self, key_to_add: K, value_to_add: V) -> NodeGeneric<K, V> {
         self.root.insert(key_to_add, value_to_add, 0)
     }
 
     /// Returns a Result which contains: a reference of the NodeGeneric associated 
-    /// to the given key, if the key is contained; Err(()) otherwise 
+    /// to the given key, if the key is contained; Err(()) otherwise. 
     /// Panics if the given key is not associated to any value in the MerkleTree.
     pub fn get_node(&self, key: K) -> Result<&NodeGeneric<K, V>, ()> {
         self.root.find_path(&key, 0)
