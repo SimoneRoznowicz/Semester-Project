@@ -244,6 +244,7 @@ mod tests {
         //157: 10011101 --> CCCCC  //12:  00001100 --> DDDDD  //100: 01100100 --> EEEEE
         //104: 01101000 --> FFFFF  //183: 10110111 --> GGGGG
         mpt.compute_hashes();
+        print!("\n\n\n**********************\n");
         print!("HHHHH\n\n");
         let proofHHHHH = mpt.prove("HHHHH");
         for sib in proofHHHHH.get_siblings() {

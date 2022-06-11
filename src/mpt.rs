@@ -5,12 +5,9 @@ use serde::{Deserialize, Serialize};
 use talk::crypto::primitives::hash::Hash;
 
 /**
- * Introduction to the project:
- *
  * In this representation of the Merkle Patricia Tree,
  * • true <--> 1 <--> Right
  * • false <--> 0 <--> Left
- *
 **/
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Hash)]
