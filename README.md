@@ -6,4 +6,4 @@ It consists in the development of Merkle Patricia Tree with two main goals:
 * Give both *Proof-of-Inclusion* and *Proof-of-Exclusion* for every transaction in the batch (in the current implementation only the former is guaranteed). 
 * Allow the brokers to send proofs to the clients, such that the minimum amount of information is efficiently sent over the network.
 
-Here is the final report for further information: 
+Here is the final report for further information: [Report](https://github.com/SimoneRoznowicz/Semester-Project/blob/main/Report/Semester_Project_Simone_Roznowicz.pdf)
