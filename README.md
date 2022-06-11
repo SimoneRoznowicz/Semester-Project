@@ -1,4 +1,4 @@
-# Semester-Project
+# Sender Agnostic Batches for Carbon
 The Semester Project was done in the *Distributed Computing Laboratory* at the *School of Computer and Communication Sciences* at École polytechnique fédérale de Lausanne (EPFL).
 
 The project deals with the authentication process required in [Carbon](https://github.com/Distributed-EPFL/carbon) and other cryptocurrencies.
